@@ -107,7 +107,16 @@ def get_latest_news_and_sentiment(ticker: str) -> Tuple[Optional[str], float]:
             sentiment_score = analyzer.polarity_scores(headline)["compound"]
     return headline, sentiment_score
 
-
+def get_news_feed(ticker: str):
+    try:
+        news_items = yf.Ticker(ticker).news
+        if not news_items:
+            return []
+        # Keep top 5 for readability
+        return news_items[:5]
+    except Exception as e:
+        return [{"title": f"Failed to fetch news: {e}"}]
+        
 def get_option_chain_metrics(ticker: str) -> Tuple[float, float, float]:
     """
     Retrieve option chain data and compute key metrics.
