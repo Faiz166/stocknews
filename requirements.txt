@@ -1,4 +1,4 @@
-yfinance==0.2.18
+yfinance==0.2.38
 vaderSentiment==3.3.2
-pandas==2.0.3
-streamlit>=1.32.0
+pandas>=2.2.3
+streamlit>=1.37.0
