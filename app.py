@@ -25,6 +25,7 @@ live data.
 """
 
 import os
+import time
 import datetime
 
 import pandas as pd
@@ -59,19 +60,22 @@ def yfinance_tester():
             try:
                 t = yf.Ticker(ticker_input)
 
-                # Basic info
-                info = t.info
+                # Basic info (safe)
+                info = getattr(t, "info", {})
                 st.write("**Company Info (summary):**")
                 st.json({k: info.get(k) for k in ["symbol", "shortName", "sector", "industry", "marketCap"]})
 
                 # Recent history
                 hist = t.history(period="5d")
-                st.write("**Last 5 days history:**")
-                st.dataframe(hist)
+                if not hist.empty:
+                    st.write("**Last 5 days history:**")
+                    st.dataframe(hist)
+                else:
+                    st.warning("No history returned.")
 
                 # News
                 try:
-                    news = t.news
+                    news = getattr(t, "news", [])
                     if news:
                         st.write("**Latest News Headlines:**")
                         for n in news[:5]:
@@ -83,6 +87,31 @@ def yfinance_tester():
 
             except Exception as e:
                 st.error(f"Ticker fetch failed: {e}")
+
+
+# -----------------------
+# Cached Data Fetch
+# -----------------------
+@st.cache_data(ttl=600)  # cache for 10 minutes
+def fetch_signals():
+    """Fetch signals for all tickers with minimal Yahoo requests."""
+    results = generate_signals_for_tickers(WATCHLIST)
+    # short delay to reduce risk of 429 errors
+    time.sleep(1)
+    return results
+
+
+@st.cache_data(ttl=600)
+def fetch_news():
+    """Fetch news for watchlist with staggered requests."""
+    news_dict = {}
+    for t in WATCHLIST:
+        try:
+            news_dict[t] = get_news_feed(t)
+        except Exception:
+            news_dict[t] = []
+        time.sleep(1)  # stagger requests
+    return news_dict
 
 
 # -----------------------
@@ -102,14 +131,17 @@ def main():
         """
     )
 
-    # Generate signals and display them
-    with st.spinner("Fetching data and computing signals..."):
-        signals_df = generate_signals_for_tickers(WATCHLIST)
+    # Manual reload button
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+
+    # Signals
+    with st.spinner("Fetching signals..."):
+        signals_df = fetch_signals()
 
     st.subheader("Today's Signals")
     st.dataframe(signals_df)
 
-    # Append to CSV
     append_signals_to_csv(signals_df, CSV_PATH)
 
     # Trade history
@@ -120,15 +152,15 @@ def main():
     except Exception:
         st.info("No trade history found yet.")
 
-    # News feed
+    # News
     st.subheader("Latest News Feed")
-    for t in WATCHLIST:
+    news_data = fetch_news()
+    for t, items in news_data.items():
         st.markdown(f"### {t}")
-        news_items = get_news_feed(t)
-        if not news_items:
+        if not items:
             st.write("No news available.")
         else:
-            for item in news_items:
+            for item in items:
                 title = item.get("title", "No title")
                 link = item.get("link")
                 publisher = item.get("publisher", "Unknown")
@@ -137,7 +169,6 @@ def main():
                 else:
                     st.markdown(f"- {title} ({publisher})")
 
-    # Footer
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Debug tester
