@@ -8,29 +8,44 @@ implied volatility change and volume spike, and classifies the expected
 direction of the underlying price ("RISE" or "FALL") along with a
 confidence magnitude.  All signals and their underlying metrics are logged
 to a CSV file for later analysis.
-
-To run this app locally:
-
-    streamlit run app.py
-
-To deploy for free on Streamlit Cloud:
-1. Push this repository to GitHub.
-2. Sign in to https://streamlit.io and create a new app using the GitHub repo.
-3. Choose ``app.py`` as the entry point.
-4. The app will fetch data and log signals on each run.
-
-Note: Data retrieval relies on external network access.  In offline
-environments the app will display zeros or fallback values instead of
-live data.
 """
 
+# -----------------------
+# Monkey-patch yfinance requests with modern headers + retry
+# -----------------------
+import requests
+from requests.adapters import HTTPAdapter, Retry
+
+# Build a global session that looks like Chrome
+session = requests.Session()
+session.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://finance.yahoo.com/",
+    "Connection": "keep-alive",
+})
+
+# Add retry for 429/500s
+retries = Retry(total=3, backoff_factor=0.6,
+                status_forcelist=[429, 500, 502, 503, 504])
+session.mount("https://", HTTPAdapter(max_retries=retries))
+
+# Monkey-patch yfinance to use this session
+import yfinance as yf
+yf.shared._requests = session
+
+# -----------------------
+# Standard imports
+# -----------------------
 import os
 import time
 import datetime
-
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 from signal_engine import (
     generate_signals_for_tickers,
@@ -96,8 +111,7 @@ def yfinance_tester():
 def fetch_signals():
     """Fetch signals for all tickers with minimal Yahoo requests."""
     results = generate_signals_for_tickers(WATCHLIST)
-    # short delay to reduce risk of 429 errors
-    time.sleep(1)
+    time.sleep(1)  # small backoff
     return results
 
 
