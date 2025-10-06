@@ -73,6 +73,22 @@ def main():
 
     # Show the date/time of last update
     st.caption(f"Last updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        st.subheader("Latest News Feed")
+
+    for t in tickers:
+        st.markdown(f"### {t}")
+        news_items = se.get_news_feed(t)
+        if not news_items:
+            st.write("No news available.")
+        else:
+            for item in news_items:
+                title = item.get("title", "No title")
+                link = item.get("link", None)
+                publisher = item.get("publisher", "Unknown")
+                if link:
+                    st.markdown(f"- [{title}]({link}) ({publisher})")
+                else:
+                    st.markdown(f"- {title} ({publisher})")
 
 
 if __name__ == "__main__":
